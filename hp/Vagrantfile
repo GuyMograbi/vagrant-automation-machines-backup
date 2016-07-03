@@ -1,0 +1,47 @@
+# https://github.com/mohitsethi/vagrant-hp
+# vagrant plugin install vagrant-hp
+# vagrant up --provider=hp
+
+
+require_relative '../util/util'
+
+CONFIG_FILE = ENV['CONFIG_FILE'] # supports JSON!!!
+
+config = Util.new
+cloudname = File.basename(Dir.getwd)
+configs = config.getConfigs(CONFIG_FILE, cloudname)
+
+environment_provision_script = config.initEnvironmentProvision(configs)
+
+excludes_array = ['.git','_site']
+config.setVagrantignore(excludes_array)
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "hp-box"
+  config.vm.box_url = "https://github.com/mohitsethi/vagrant-hp/raw/master/dummy_hp.box"
+
+  config.vm.synced_folder "../synced_folder", "/vagrant", type: "rsync", rsync__exclude: excludes_array
+
+  config.vm.provision "shell", inline: environment_provision_script
+
+  config.vm.provision "shell" do |s|
+    s.path = "../provision.sh"
+    s.privileged = false
+  end
+
+  config.vm.provider :hp do |hp|
+    hp.access_key = configs['hp']['accessKey']
+    hp.secret_key = configs['hp']['secretKey']
+    hp.flavor = configs['hp']['flavor']
+    hp.tenant_id = configs['hp']['tenantId']
+    hp.server_name = configs['hp']['serverName']
+    hp.image = configs['hp']['image']
+    hp.keypair_name = configs['hp']['keypairName']
+    hp.ssh_private_key_path = configs['hp']['ssh']['privateKeyPath']
+    hp.ssh_username = configs['hp']['ssh']['username']
+    hp.availability_zone = "az1"
+
+  end
+
+end

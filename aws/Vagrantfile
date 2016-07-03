@@ -1,0 +1,57 @@
+# https://github.com/mitchellh/vagrant-aws
+# vagrant plugin install vagrant-aws
+# vagrant up --provider=aws
+
+
+require_relative '../util/util'
+
+CONFIG_FILE = ENV['CONFIG_FILE'] # supports JSON!!!
+
+config = Util.new
+cloudname = File.basename(Dir.getwd)
+configs = config.getConfigs(CONFIG_FILE, cloudname)
+
+environment_provision_script = config.initEnvironmentProvision(configs)
+
+excludes_array = ['.git','_site']
+config.setVagrantignore(excludes_array)
+
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "aws-box"
+  config.vm.box_url = "https://github.com/mitchellh/vagrant-aws/raw/master/dummy.box"
+
+  # please note - in aws provider the flag is NOT rsync__exclude but instead rsync_exclude (single underscore, not double)
+  # https://github.com/mitchellh/vagrant-aws/pull/156
+  config.vm.synced_folder "../synced_folder", "/vagrant", type: "rsync", rsync_exclude: excludes_array
+
+  config.vm.provision "shell", inline: environment_provision_script
+
+  config.vm.provision "shell" do |s|
+    s.path = "../provision.sh"
+    s.privileged = false
+  end
+
+  config.vm.provider :aws do |aws, override|
+    aws.block_device_mapping = [{ 'DeviceName' => '/dev/sda1', 'Ebs.VolumeSize' => 50 }]
+    aws.access_key_id = configs['aws']['accessKey']
+    aws.secret_access_key = configs['aws']['secretAccessKey']
+    aws.keypair_name = configs['aws']['keypairName']
+
+    aws.region = configs['aws']['region']
+    aws.instance_type = configs['aws']['instanceType']
+    aws.user_data = "#!/bin/bash\nsed -i -e 's/^Defaults.*requiretty/# Defaults requiretty/g' /etc/sudoers"
+    aws.ami = configs['aws']['ami']
+
+    aws.tags = {
+        'Name' => configs['aws']['machineName']
+    }
+
+    override.ssh.username = configs['aws']['ssh']['username']
+    override.ssh.private_key_path = configs['aws']['ssh']['privateKeyPath']
+    # http://stackoverflow.com/questions/33098913/vagrant-fails-to-get-machine-up-throwing-keep-getting-an-error-prompt-undef?noredirect=1#comment54025480_33098913
+    override.ssh.insert_key = false
+
+
+  end
+end

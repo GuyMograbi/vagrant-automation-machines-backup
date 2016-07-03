@@ -1,0 +1,42 @@
+# https://github.com/mitchellh/vagrant-aws
+# vagrant plugin install vagrant-aws
+# vagrant up --provider=aws
+
+require_relative '../util/util'
+
+CONFIG_FILE = ENV['CONFIG_FILE'] # supports JSON!!!
+
+config = Util.new
+cloudname = File.basename(Dir.getwd)
+configs = config.getConfigs(CONFIG_FILE, cloudname)
+
+environment_provision_script = config.initEnvironmentProvision(configs)
+
+excludes_array = ['.git','_site']
+config.setVagrantignore(excludes_array)
+
+Vagrant.configure("2") do |config|
+
+  config.vm.synced_folder "../synced_folder", "/vagrant", type: "rsync", rsync__exclude: excludes_array
+
+  config.vm.provision "shell", inline: environment_provision_script
+
+  config.vm.provision "shell" do |s|
+
+    s.path = "../provision.sh"
+    s.privileged = false
+  end
+
+  #config.ssh.port = 22
+
+  ENV['VAGRANT_DEFAULT_PROVIDER'] = 'docker'
+
+  config.vm.provider :docker do |docker, override|
+
+    # todo: add port forwarding
+    #  http://stackoverflow.com/questions/23530299/how-to-map-docker-ports-using-vagrant-1-6-and-the-docker-provider
+
+    docker.build_dir = configs['docker']['buildDir']
+    docker.has_ssh = true
+  end
+end
